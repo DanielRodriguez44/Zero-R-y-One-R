@@ -1,0 +1,108 @@
+import csv
+import random   #aleatorio
+from collections import Counter  #Zero R One R
+from tabulate import tabulate #tablas
+
+# Función para cargar datos desde un archivo CSV
+def cargar_archivo_csv(nombre_archivo):
+    datos = []
+    with open(nombre_archivo, 'r') as archivo:
+        lector_csv = csv.reader(archivo)
+        atributos = next(lector_csv)  # Leer la primera fila como nombres de atributos
+        return atributos, list(lector_csv)
+
+# Función para dividir los datos en conjuntos de entrenamiento y prueba
+def dividir_datos(datos, porcentaje_entrenamiento=70):
+    random.shuffle(datos)
+    total_filas = len(datos)
+    entrenamiento_size = int(total_filas * porcentaje_entrenamiento / 100)
+    conjunto_entrenamiento = datos[:entrenamiento_size]
+    conjunto_prueba = datos[entrenamiento_size:]
+    return conjunto_entrenamiento, conjunto_prueba
+
+# Modelo Zero-R: Predicción basada en la clase más común
+def modelo_zero_r(atributos, conjunto_entrenamiento, conjunto_prueba, clase_columna):
+    atributo_clase_idx = atributos.index(clase_columna)  # Usar el nombre de la columna de clase
+    atributos_clase_entrenamiento = [fila[atributo_clase_idx] for fila in conjunto_entrenamiento]
+    atributos_clase_prueba = [fila[atributo_clase_idx] for fila in conjunto_prueba]
+
+    clase_mas_comun_entrenamiento = Counter(atributos_clase_entrenamiento).most_common(1)
+    clase_mas_comun_prueba = Counter(atributos_clase_prueba).most_common(1)
+
+    print("Modelo Zero-R")
+    print(f"Atributo más repetido en el conjunto de entrenamiento: {clase_mas_comun_entrenamiento[0][0]}")
+    print(f"Atributo más repetido en el conjunto de prueba: {clase_mas_comun_prueba[0][0]}")
+
+# Modelo One-R: Predicción basada en reglas
+def modelo_one_r(atributos, conjunto_entrenamiento, conjunto_prueba, clase_columna):
+    atributo_clase_idx = atributos.index(clase_columna)  # Obtener el índice de la columna de la clase
+    atributos_clase_prueba = [fila[atributo_clase_idx] for fila in conjunto_prueba]
+
+    reglas = {}
+    atributo_menor_error = None  # Inicializamos con None
+
+    for i in range(len(atributos) - 1):  # Recorrer los atributos (excluyendo la columna de clase)
+        atributo = [fila[i] for fila in conjunto_entrenamiento]
+        valores = list(set(atributo))
+        regla = {}
+        error_total = 0  # Inicializamos el error total para este atributo
+
+        for valor in valores:
+            atributos_clase = [atributos_clase_prueba[j] for j in range(len(conjunto_prueba)) if conjunto_prueba[j][i] == valor]
+            clase_mas_comun = Counter(atributos_clase).most_common(1)
+
+            if clase_mas_comun:  # Verificar que la lista no esté vacía
+                regla[str(valor)] = clase_mas_comun[0][0]
+                error_valor = len(atributos_clase) - clase_mas_comun[0][1]  # Error = Total - Número de ocurrencias de la clase más común
+                error_total += error_valor  # Acumulamos el error
+
+        reglas[atributos[i]] = regla
+
+        # Comparamos el error de este atributo con el menor error actual
+        if atributo_menor_error is None or error_total < atributo_menor_error[1]:
+            atributo_menor_error = (atributos[i], error_total)
+
+    print("Modelo One-R")
+    print("Tablas de frecuencia y reglas:")
+
+    for atributo in atributos:
+        if atributo != clase_columna:
+            print(f"{atributo}:")
+            clase_columna_valores = list(set(atributos_clase_prueba))
+            headers = [""] + clase_columna_valores
+            tabla_frecuencia = []
+            for valor in reglas[atributo].keys():
+                fila = [valor]
+                for clase in clase_columna_valores:
+                    coincidencias = sum(1 for c in atributos_clase_prueba if c == clase)
+                    coincidencias_valor = reglas[atributo][valor].count(clase) if reglas[atributo][valor] == clase else 0
+                    fila.append(coincidencias_valor)
+                tabla_frecuencia.append(fila)
+            print(tabulate(tabla_frecuencia, headers, tablefmt="pretty"))
+
+    if atributo_menor_error:
+        print(f"Atributo con el error más bajo: {atributo_menor_error[0]}")
+
+# Función para mostrar los conjuntos de entrenamiento y prueba en forma tabular
+def mostrar_conjuntos(conjunto_entrenamiento, conjunto_prueba, atributos):
+    print("Conjunto de Entrenamiento:")
+    print(tabulate(conjunto_entrenamiento, headers=atributos, tablefmt="pretty"))
+    print("Conjunto de Prueba:")
+    print(tabulate(conjunto_prueba, headers=atributos, tablefmt="pretty"))
+
+# Función para evaluar los modelos
+def evaluar_modelos(nombre_archivo, iteraciones, clase_columna):
+    atributos, datos = cargar_archivo_csv(nombre_archivo)
+    for i in range(iteraciones):
+        print(f"Iteración {i+1}:")
+        conjunto_entrenamiento, conjunto_prueba = dividir_datos(datos)
+        mostrar_conjuntos(conjunto_entrenamiento, conjunto_prueba, atributos)
+        modelo_zero_r(atributos, conjunto_entrenamiento, conjunto_prueba, clase_columna)
+        modelo_one_r(atributos, conjunto_entrenamiento, conjunto_prueba, clase_columna)
+        print()
+
+# Llamada para evaluar los modelos
+nombre_archivo = "prueba.csv"
+iteraciones = int(input("Número de iteraciones: "))
+clase_columna = input("Nombre de la columna de clase: ")  # Ingresa el nombre de la columna de clase en el archivo
+evaluar_modelos(nombre_archivo, iteraciones, clase_columna)
